@@ -56,34 +56,39 @@ namespace gazebo
 {
   class GAZEBO_VISIBLE DvsPlugin : public SensorPlugin
   {
-    public: DvsPlugin();
+    public:
+      DvsPlugin();
+      ~DvsPlugin();
+      void Load(sensors::SensorPtr _parent, sdf::ElementPtr _sdf);
 
-    public: ~DvsPlugin();
-
-    public: void Load(sensors::SensorPtr _parent, sdf::ElementPtr _sdf);
-
-    protected: virtual void OnNewFrame(const unsigned char *_image,
+    protected:
+      virtual void OnNewFrame(const unsigned char *_image,
                    unsigned int _width, unsigned int _height,
                    unsigned int _depth, const string &_format);
 
-    protected: unsigned int width, height, depth;
-    protected: string format;
+      unsigned int width, height, depth;
+      string format;
+      sensors::CameraSensorPtr parentSensor;
+      rendering::CameraPtr camera;
+      ros::NodeHandle node_handle_;
+      ros::Publisher event_pub_;
+      string namespace_;
 
-    protected: sensors::CameraSensorPtr parentSensor;
-    protected: rendering::CameraPtr camera;
-
-    private: event::ConnectionPtr newFrameConnection;
-
-    protected: ros::NodeHandle node_handle_;
-    protected: ros::Publisher event_pub_;
-    protected: string namespace_;
-
-    private: Mat last_image;
-    private: bool has_last_image;
-    private: float event_threshold;
-    private: void processDelta(Mat *last_image, Mat *curr_image);
-    private: void fillEvents(Mat *diff, int polarity, vector<dvs_msgs::Event> *events);
-    private: void publishEvents(vector<dvs_msgs::Event> *events);
+    private: 
+      event::ConnectionPtr newFrameConnection;
+      Mat last_image;
+      Mat reference_image;
+      Mat thresholds;
+      float reference_leak;
+      float leak_probability;
+      float threshold_decay;
+      float threshold_increment;
+      
+      bool has_last_image;
+      float event_threshold;
+      void processDelta(Mat *last_image, Mat *curr_image);
+      void fillEvents(Mat *diff, int polarity, vector<dvs_msgs::Event> *events);
+      void publishEvents(vector<dvs_msgs::Event> *events);
   };
 }
 #endif

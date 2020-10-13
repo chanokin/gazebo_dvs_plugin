@@ -36,6 +36,10 @@ The following SDF snippet shows an example usage:
             <cameraName>camera_front</cameraName>
             <robotNamespace>AADC_AudiTT</robotNamespace>
             <eventThreshold>10</eventThreshold>
+            <tauLeak>0</tauLeak>
+            <leakProbability>1</leakProbability>
+            <tauThreshold>0</tauThreshold>
+            <thresholdIncrement>0</thresholdIncrement>
             <cameraInfoTopicName>camera_info</cameraInfoTopicName>
             <!-- <eventsTopicName>events</eventsTopicName> -->
         </plugin>

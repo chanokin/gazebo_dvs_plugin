@@ -45,6 +45,7 @@
 #endif
 
 #include <string>
+#include <math.h>
 
 #include <ros/ros.h>
 #include <ros/console.h>
@@ -68,6 +69,15 @@ using namespace cv;
 
 namespace gazebo
 {
+  template <class T>
+  checkAndGet(const std::string field, const sdf::ElementPtr sdf, T & res){
+    if (sdf->HasElement("robotNamespace")){
+      res = sdf->GetElement(field)->Get<T>();
+    } else {
+      gzwarn << "[gazebo_ros_dvs_camera] Please specify a " << field << "." << endl;
+    }
+  }
+
   // Register this plugin with the simulator
   GZ_REGISTER_SENSOR_PLUGIN(DvsPlugin)
 
@@ -117,29 +127,50 @@ namespace gazebo
     this->format = this->camera->GetImageFormat();
 #endif
 
-    if (_sdf->HasElement("robotNamespace"))
-      namespace_ = _sdf->GetElement("robotNamespace")->Get<std::string>();
-    else
-      gzwarn << "[gazebo_ros_dvs_camera] Please specify a robotNamespace." << endl;
-
+    checkAndGet<std::string>("robotNamespace", _sdf, namespace_);
     node_handle_ = ros::NodeHandle(namespace_);
 
     string sensorName = "";
-    if (_sdf->HasElement("cameraName"))
-      sensorName = _sdf->GetElement("cameraName")->Get<std::string>() + "/";
-    else
-      gzwarn << "[gazebo_ros_dvs_camera] Please specify a cameraName." << endl;
+    checkAndGet<std::string>("cameraName", _sdf, sensorName);
 
     string topicName = "events";
-    if (_sdf->HasElement("eventsTopicName"))
-      topicName = _sdf->GetElement("eventsTopicName")->Get<std::string>();
-
+    checkAndGet<std::string>("eventsTopicName", _sdf, topicName);
     const string topic = sensorName + topicName;
 
-    if (_sdf->HasElement("eventThreshold"))
-      this->event_threshold = _sdf->GetElement("eventThreshold")->Get<float>();
-    else
-      gzwarn << "[gazebo_ros_dvs_camera] Please specify a DVS threshold." << endl;
+    checkAndGet<float>("eventThreshold", _sdf, this->event_threshold);
+    this->thresholds.setTo(this->event_threshold);
+
+    //*
+#if GAZEBO_MAJOR_VERSION >= 7
+    float rate = this->camera->RenderRate();
+#else
+    float rate = this->camera->GetRenderRate();
+#endif
+    if (!isfinite(rate))
+      rate =  30.0; //N frames per 1 second
+    float dt = 1.0 / rate; // seconds
+    //*/
+
+    // float fps = 1.0f;
+    // checkAndGet<float>("update_rate", _sdf, fps);
+    float timestep = 1000.0f * dt; //ms
+
+      // float reference_leak;
+      // float leak_probability;
+      // float threshold_decay;
+      // float threshold_increment;
+
+    float tauThreshold = 0.0001f;
+    checkAndGet<float>("tauThreshold", _sdf, tauThreshold);
+    this->threshold_decay = exp(-timestep/tauThreshold);
+
+    checkAndGet<float>("thresholdIncrement", _sdf, this->threshold_increment);
+
+    float tauLeak = 10000000000000.0f;
+    checkAndGet<float>("tauLeak", _sdf, tauLeak);
+    this->reference_leak = exp(-timestep/tauLeak);
+
+    checkAndGet<float>("leakProbability", _sdf, this->leak_probability);
 
     event_pub_ = node_handle_.advertise<dvs_msgs::EventArray>(topic, 10, 10.0);
 
@@ -161,16 +192,6 @@ namespace gazebo
     _image = this->camera->GetImageData(0);
 #endif
 
-    /*
-#if GAZEBO_MAJOR_VERSION >= 7
-float rate = this->camera->RenderRate();
-#else
-float rate = this->camera->GetRenderRate();
-#endif
-if (!isfinite(rate))
-rate =  30.0;
-float dt = 1.0 / rate;
-     */
 
     // convert given frame to opencv image
     cv::Mat input_image(_height, _width, CV_8UC3);
