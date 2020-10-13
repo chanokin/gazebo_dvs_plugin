@@ -160,7 +160,7 @@ namespace gazebo
       // float threshold_decay;
       // float threshold_increment;
 
-    float tauThreshold = 0.0001f;
+    float tauThreshold = 1.0f;
     checkAndGet<float>("tauThreshold", _sdf, tauThreshold);
     this->threshold_decay = exp(-timestep/tauThreshold);
 
