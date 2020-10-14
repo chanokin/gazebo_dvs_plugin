@@ -84,7 +84,7 @@ namespace gazebo
     ////////////////////////////////////////////////////////////////////////////////
     // Constructor
     DvsPlugin::DvsPlugin()
-    : SensorPlugin(), width(0), height(0), depth(0), has_last_image(false)
+    : SensorPlugin(), width(0), height(0), depth(0), first_frame(true)
   {
   }
 
@@ -127,6 +127,7 @@ namespace gazebo
     this->format = this->camera->GetImageFormat();
 #endif
 
+    
     checkAndGet<std::string>("robotNamespace", _sdf, namespace_);
     node_handle_ = ros::NodeHandle(namespace_);
 
@@ -148,17 +149,13 @@ namespace gazebo
 #endif
     if (!isfinite(rate))
       rate =  30.0; //N frames per 1 second
+
     float dt = 1.0 / rate; // seconds
     //*/
 
     // float fps = 1.0f;
     // checkAndGet<float>("update_rate", _sdf, fps);
     float timestep = 1000.0f * dt; //ms
-
-      // float reference_leak;
-      // float leak_probability;
-      // float threshold_decay;
-      // float threshold_increment;
 
     float tauThreshold = 1.0f;
     checkAndGet<float>("tauThreshold", _sdf, tauThreshold);
@@ -171,6 +168,19 @@ namespace gazebo
     this->reference_leak = exp(-timestep/tauLeak);
 
     checkAndGet<float>("leakProbability", _sdf, this->leak_probability);
+
+    this->curr_image = cv::Mat(this->height, this->width, CV_16FC1);
+    this->reference = cv::Mat(this->height, this->width, CV_16FC1);
+    this->difference = cv::Mat(this->height, this->width, CV_16FC1);
+    this->events = cv::Mat(this->height, this->width, CV_16FC1);
+    this->thresholds = \
+      cv::Mat(this->height, this->width, CV_16FC1, cv::cvScalar(this->event_threshold));
+
+    this->dvsOp.init(&(this->curr_image), &(this->difference), 
+                     &(this->reference), &(this->thresholds), 
+                     &_events,
+                    _relaxRate, _adaptUp, _adaptDown);
+
 
     event_pub_ = node_handle_.advertise<dvs_msgs::EventArray>(topic, 10, 10.0);
 
@@ -194,15 +204,14 @@ namespace gazebo
 
 
     // convert given frame to opencv image
+    // gazebo provides an RGB image
     cv::Mat input_image(_height, _width, CV_8UC3);
     input_image.data = (uchar*)_image;
 
     // color to grayscale
-    cv::Mat curr_image_rgb(_height, _width, CV_8UC3);
-    cvtColor(input_image, curr_image_rgb, CV_RGB2BGR);
-    cvtColor(curr_image_rgb, input_image, CV_BGR2GRAY);
-
-    cv::Mat curr_image = input_image;
+    cv::Mat curr_image(_height, _width, CV_8UC1);
+    cvtColor(input_image, curr_image, CV_RGB2GRAY);
+    curr_image.convertTo(this->curr_image, CV_32F);
 
 /* TODO any encoding configuration should be supported
     try {
@@ -217,14 +226,13 @@ namespace gazebo
 */
 
     assert(_height == height && _width == width);
-    if (this->has_last_image)
-    {
-      this->processDelta(&this->last_image, &curr_image);
+    if (!(this->first_frame)){
+      this->processDelta();
     }
     else if (curr_image.size().area() > 0)
     {
-      this->last_image = curr_image;
-      this->has_last_image = true;
+      this->reference = this->curr_image;
+      this->first_frame = false;
     }
     else
     {
@@ -232,18 +240,17 @@ namespace gazebo
     }
   }
 
-  void DvsPlugin::processDelta(cv::Mat *last_image, cv::Mat *curr_image)
+  void DvsPlugin::processDelta(cv::Mat *curr_image)
   {
-    if (curr_image->size() == last_image->size())
+    if (this->curr_image.size() == this->reference.size())
     {
-      cv::Mat pos_diff = *curr_image - *last_image;
-      cv::Mat neg_diff = *last_image - *curr_image;
-
+      cv::parallel_for_(cv::Range(0, _gray.rows), _dvsOp);
+      cv::Mat pos_diff = this->curr_image - this->reference;
       cv::Mat pos_mask;
       cv::Mat neg_mask;
 
       cv::threshold(pos_diff, pos_mask, event_threshold, 255, cv::THRESH_BINARY);
-      cv::threshold(neg_diff, neg_mask, event_threshold, 255, cv::THRESH_BINARY);
+      cv::threshold(neg_diff, neg_mask, -event_threshold, 255, cv::THRESH_BINARY);
 
       *last_image += pos_mask & pos_diff;
       *last_image -= neg_mask & neg_diff;

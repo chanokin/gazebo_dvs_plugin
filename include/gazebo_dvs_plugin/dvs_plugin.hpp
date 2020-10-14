@@ -48,6 +48,7 @@
 #include <dvs_msgs/Event.h>
 #include <dvs_msgs/EventArray.h>
 #include <opencv2/opencv.hpp>
+#include "./nvs_op.hpp"
 
 using namespace std;
 using namespace cv;
@@ -76,17 +77,22 @@ namespace gazebo
 
     private: 
       event::ConnectionPtr newFrameConnection;
-      Mat last_image;
+      Mat curr_image;
       Mat reference_image;
       Mat thresholds;
+      Mat difference;
+      Mat events;
+
       float reference_leak;
       float leak_probability;
       float threshold_decay;
       float threshold_increment;
+      NVSOperator nvsOp;
       
-      bool has_last_image;
+      bool first_frame;
       float event_threshold;
-      void processDelta(Mat *last_image, Mat *curr_image);
+
+      void processDelta();
       void fillEvents(Mat *diff, int polarity, vector<dvs_msgs::Event> *events);
       void publishEvents(vector<dvs_msgs::Event> *events);
   };
