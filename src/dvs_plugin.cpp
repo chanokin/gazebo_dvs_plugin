@@ -176,10 +176,15 @@ namespace gazebo
     this->thresholds = \
       cv::Mat(this->height, this->width, CV_16FC1, cv::cvScalar(this->event_threshold));
 
-    this->dvsOp.init(&(this->curr_image), &(this->difference), 
+    this->nvsOp.init(&(this->curr_image), &(this->difference), 
                      &(this->reference), &(this->thresholds), 
-                     &_events,
-                    _relaxRate, _adaptUp, _adaptDown);
+                     &(this->events),
+                     this->reference_leak, 
+                     this->threshold_increment, 
+                     this->threshold_decay,
+                     this->leak_probability,
+                     this->event_threshold 
+                    );
 
 
     event_pub_ = node_handle_.advertise<dvs_msgs::EventArray>(topic, 10, 10.0);
@@ -244,21 +249,12 @@ namespace gazebo
   {
     if (this->curr_image.size() == this->reference.size())
     {
-      cv::parallel_for_(cv::Range(0, _gray.rows), _dvsOp);
-      cv::Mat pos_diff = this->curr_image - this->reference;
-      cv::Mat pos_mask;
-      cv::Mat neg_mask;
-
-      cv::threshold(pos_diff, pos_mask, event_threshold, 255, cv::THRESH_BINARY);
-      cv::threshold(neg_diff, neg_mask, -event_threshold, 255, cv::THRESH_BINARY);
-
-      *last_image += pos_mask & pos_diff;
-      *last_image -= neg_mask & neg_diff;
+      cv::parallel_for_(cv::Range(0, _gray.rows), this->nvsOp);
 
       std::vector<dvs_msgs::Event> events;
 
-      this->fillEvents(&pos_mask, 0, &events);
-      this->fillEvents(&neg_mask, 1, &events);
+      this->fillEvents(&events);
+      this->fillEvents(&events);
 
       this->publishEvents(&events);
     }
@@ -268,25 +264,25 @@ namespace gazebo
     }
   }
 
-  void DvsPlugin::fillEvents(cv::Mat *mask, int polarity, std::vector<dvs_msgs::Event> *events)
+  void DvsPlugin::fillEvents(std::vector<dvs_msgs::Event> *events)
   {
     // findNonZero fails when there are no zeros
     // TODO is there a better workaround then iterating the binary image twice?
-    if (cv::countNonZero(*mask) != 0)
-    {
-      std::vector<cv::Point> locs;
-      cv::findNonZero(*mask, locs);
+    std::vector<cv::Point> locs;
 
-      for (int i = 0; i < locs.size(); i++)
-      {
-        dvs_msgs::Event event;
-        event.x = locs[i].x;
-        event.y = locs[i].y;
-        event.ts = ros::Time::now();
-        event.polarity = polarity;
-        events->push_back(event);
+    for (size_t row = 0; row < this->height; row++){
+      for (size_t col = 0; col < this->width; col++){
+        if (this->events[row][col] != 0.0f){
+          dvs_msgs::Event event;
+          event.x = col;
+          event.y = row;
+          event.ts = ros::Time::now();
+          event.polarity = this->events[row][col] > 0 ? 1 : 0;
+          events->push_back(event);
+        }
       }
     }
+    
   }
 
   void DvsPlugin::publishEvents(std::vector<dvs_msgs::Event> *events)

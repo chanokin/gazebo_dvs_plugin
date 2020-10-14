@@ -2,6 +2,9 @@
 
 
 void NVSOperator::operator()(const cv::Range& range) const{
+    bool test = false;
+    float p = 1.0f;
+    cv::RNG rng();
     for (int32_t row(range.start); row < range.end; ++row) {
         float const* it_src(src->ptr<float>(row));
         float* it_diff(diff->ptr<float>(row));
@@ -15,18 +18,22 @@ void NVSOperator::operator()(const cv::Range& range) const{
 
             (*it_diff) = (*it_diff) * ((float)test);
 
-            if (rng.uniform(0., 1.) <= prob){
+
+            p = rng.uniform(0.0f, 1.0f);
+            if (p <= prob){
                 (*it_ref) = (relax * (*it_ref)) 
             }
-            
             (*it_ref) += (*it_diff);
+            
             if(test){
                 (*it_thr) = (*it_thr) * up;
-            }else{
-                (*it_thr) = base_thr + ((*it_thr) - base_thr) * down;
+                (*it_ev) = (*it_diff) > 0 ? 1 : -1;
             }
-
-
+            else{
+                (*it_ev) = 0;
+            }
+            (*it_thr) = base_thr + ((*it_thr) - base_thr) * down;
+            
             
             //advance pointers
             ++it_src; 

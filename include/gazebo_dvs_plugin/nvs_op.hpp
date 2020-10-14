@@ -13,16 +13,18 @@ class NVSOperator: public cv::ParallelLoopBody
 {
 public:
     NVSOperator():src(nullptr), diff(nullptr), ref(nullptr), thr(nullptr),
-        ev(nullptr), relax(1.0f), up(1.0f), down(1.0f), prob(0.8){}
+        ev(nullptr), relax(1.0f), up(1.0f), down(1.0f), prob(0.8f), base_thr(12.75f){}
     NVSOperator(
         cv::Mat* _src, cv::Mat* _diff, 
         cv::Mat* _ref, cv::Mat* _thr, cv::Mat* _ev,
-        float _relax, float _up, float _down)
+        float _relax, float _up, float _down, float _prob, float _base_thr)
         : src(_src), diff(_diff), ref(_ref), thr(_thr),
-        ev(_ev), relax(_relax), up(_up), down(_down){}
+        ev(_ev), relax(_relax), up(_up), down(_down), 
+        prob(_prob), base_thr(_base_thr){}
     inline void init(cv::Mat* _src, cv::Mat* _diff, 
                     cv::Mat* _ref, cv::Mat* _thr, cv::Mat* _ev,
-                    float _relax, float _up, float _down, float _prob){
+                    float _relax, float _up, float _down, float _prob, 
+                    float _base_thr){
         cout << "In DVS_OP init function " << endl;
         src = _src;
         diff = _diff;
@@ -33,8 +35,9 @@ public:
         up = _up;
         down = _down;
         prob = _prob;
-        rng = cv::RNG();
-        cout << "relax " << relax << " up " << up << " down " << down << " prob " << prob << endl;
+        base_thr = _base_thr;
+        cout << "relax " << relax << " up " << up << " down " << down \ 
+             << " prob " << prob << " thr " << base_thr << endl;
     }
 
     // inline void init(cv::Mat _src, cv::Mat _diff, 
@@ -64,7 +67,6 @@ private:
     float down;
     float prob;
     float base_thr;
-    cv::RNG rng;
 
 };
 
